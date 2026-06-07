@@ -19,7 +19,8 @@ describe('Chrome Extension Messaging and Routing', () => {
 
   it('should register listeners and respond synchronously to getSettings in background', async () => {
     // Import background.js to register its listeners
-    await import('../background.js?test=messaging-bg');
+    const bg = await import('../background.js?test=messaging-bg');
+    await bg.initPromise;
 
     const messageListeners = chrome.runtime.onMessage.listeners;
     expect(messageListeners.size).toBeGreaterThan(0);
@@ -67,7 +68,8 @@ describe('Chrome Extension Messaging and Routing', () => {
   });
 
   it('should synchronize stats activation in onConnect', async () => {
-    await import('../background.js?test=messaging-connect');
+    const bg = await import('../background.js?test=messaging-connect');
+    await bg.initPromise;
     
     const connectListeners = chrome.runtime.onConnect.listeners;
     expect(connectListeners.size).toBeGreaterThan(0);
@@ -92,7 +94,8 @@ describe('Chrome Extension Messaging and Routing', () => {
   });
 
   it('should notify popup port of tabCapture errors when lastError occurs', async () => {
-    await import('../background.js?test=messaging-error');
+    const bg = await import('../background.js?test=messaging-error');
+    await bg.initPromise;
     
     // Mock chrome.tabCapture to trigger lastError
     chrome.tabCapture.getMediaStreamId.mockImplementationOnce((options, callback) => {
@@ -120,5 +123,65 @@ describe('Chrome Extension Messaging and Routing', () => {
     expect(mockPort.postMessage).toHaveBeenCalled();
     expect(mockPort.postMessage.mock.calls[0][0].type).toBe('error');
     expect(mockPort.postMessage.mock.calls[0][0].code).toBe('capture_failed');
+  });
+
+  it('should guard against concurrent startCapture calls on the same tab', async () => {
+    const bg = await import('../background.js?test=messaging-concurrency');
+    await bg.initPromise;
+
+    const connectListeners = chrome.runtime.onConnect.listeners;
+    const connectListener = Array.from(connectListeners)[0];
+    
+    const mockPort = {
+      name: 'popup-20',
+      onDisconnect: { addListener: vi.fn() },
+      postMessage: vi.fn()
+    };
+
+    chrome.tabCapture.getMediaStreamId.mockClear();
+
+    // Trigger onConnect twice in quick succession (causes concurrent startCapture runs)
+    connectListener(mockPort);
+    connectListener(mockPort);
+
+    // Wait a tick for async calls to execute
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    // Verify getMediaStreamId was only called ONCE due to the concurrency guard
+    expect(chrome.tabCapture.getMediaStreamId).toHaveBeenCalledTimes(1);
+  });
+
+  it('should restore activeCaptures and tabSettings from session storage on service worker startup if offscreen document is open', async () => {
+    const tabId = 1;
+    const mockSettings = { enabled: true, threshold: -35, ratio: 8 };
+    await chrome.storage.session.set({
+      activeCaptures: [tabId],
+      tabSettings: { [tabId.toString()]: mockSettings }
+    });
+
+    // Simulate offscreen document is open
+    chrome.offscreen.hasDocument.mockImplementation(() => Promise.resolve(true));
+
+    const bg = await import('../background.js?test=messaging-persistence');
+    await bg.initPromise;
+
+    expect(bg.activeCaptures.has(tabId)).toBe(true);
+    expect(bg.isInitialized).toBe(true);
+
+    const messageListeners = chrome.runtime.onMessage.listeners;
+    const listener = Array.from(messageListeners).find(
+      l => l.toString().includes('getSettings') || l.toString().includes('settingsManager')
+    );
+    
+    expect(listener).toBeDefined();
+    
+    const sendResponseSpy = vi.fn();
+    listener(
+      { target: 'background', type: 'getSettings', tabId },
+      {},
+      sendResponseSpy
+    );
+
+    expect(sendResponseSpy).toHaveBeenCalledWith(expect.objectContaining(mockSettings));
   });
 });
