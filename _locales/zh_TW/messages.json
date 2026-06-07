@@ -1,0 +1,8 @@
+{
+  "extensionName": {
+    "message": "SafeAudio - 音量突波防護"
+  },
+  "extensionDescription": {
+    "message": "為任何分頁提供音訊壓縮與限制功能，避免突發的大音量（如恐怖跳嚇、直播爆音）傷害聽力。"
+  }
+}

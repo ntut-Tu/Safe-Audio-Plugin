@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SafeAudio - Volume Spike Protection</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Top Bar (Protection Switch, Logo, Settings Toggle) -->
+    <header class="top-bar">
+      <div class="logo-area">
+        <span class="logo-icon">🛡️</span>
+        <span class="logo-text">SafeAudio</span>
+      </div>
+      <div class="switch-area">
+        <span id="protection-status-label" class="status-label text-muted" data-i18n="protectionOff">OFF</span>
+        <label class="switch">
+          <input type="checkbox" id="protection-toggle">
+          <span class="slider round"></span>
+        </label>
+      </div>
+      <button id="settings-toggle-btn" class="icon-btn" title="Adjust Parameters">
+        <svg viewBox="0 0 24 24" width="20" height="20" class="gear-icon">
+          <path fill="currentColor" d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.13,5.91,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 c-0.12,0.21-0.07,0.47,0.12,0.61l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12c0,0.31,0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"></path>
+        </svg>
+      </button>
+    </header>
+
+    <!-- Main Content Area (VU Meters, Canvases, Scrollable) -->
+    <main class="content-area scrollable-content">
+      <div id="no-audio-warning" class="warning-banner hidden">
+        <span class="warning-text" data-i18n="noActiveAudio">No audio stream detected. Play something first!</span>
+      </div>
+      <div id="error-warning" class="warning-banner error hidden">
+        <span class="warning-text" id="error-warning-text" data-i18n="captureFailed">Audio capture failed. This tab may be locked by a previous version of the plugin. Please refresh the page to restart capture.</span>
+      </div>
+
+      <!-- Audio Statistics Card -->
+      <section class="card stats-card">
+        <h3 class="card-title" data-i18n="statsTitle">Audio Statistics</h3>
+        <div class="stats-grid">
+          <div class="stat-item input-theme">
+            <div class="stat-label" data-i18n="inputPeak">Input Peak</div>
+            <div class="stat-value" id="input-peak-val">-100.0 dB</div>
+            <div class="vu-meter-bg">
+              <div class="vu-meter-bar" id="input-vu-bar"></div>
+            </div>
+          </div>
+          <div class="stat-item output-theme">
+            <div class="stat-label" data-i18n="outputPeak">Output Peak</div>
+            <div class="stat-value" id="output-peak-val">-100.0 dB</div>
+            <div class="vu-meter-bg">
+              <div class="vu-meter-bar" id="output-vu-bar"></div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="reduction-container">
+          <div class="reduction-label">
+            <span data-i18n="gainReduction">Gain Reduction</span>
+            <span class="reduction-value" id="gain-reduction-val">0.0 dB</span>
+          </div>
+          <div class="reduction-meter-bg">
+            <div class="reduction-meter-bar" id="reduction-bar"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Real-time Waveform Display -->
+      <section class="card waveform-card">
+        <h3 class="card-title" data-i18n="realtimeWaveform">Real-time Waveform</h3>
+        
+        <div class="waveform-container">
+          <div class="waveform-label input-theme">Input (Unprocessed)</div>
+          <div class="canvas-wrapper">
+            <canvas id="canvas-before" width="320" height="70"></canvas>
+          </div>
+          
+          <div class="waveform-label output-theme">Output (Processed)</div>
+          <div class="canvas-wrapper">
+            <canvas id="canvas-after" width="320" height="70"></canvas>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Slide-in Parameter Settings Drawer -->
+    <div id="settings-drawer" class="settings-drawer hidden">
+      <div class="drawer-header">
+        <h3 class="drawer-title" data-i18n="settingsTitle">Compressor Settings</h3>
+        <button id="settings-close-btn" class="close-btn">&times;</button>
+      </div>
+      <div class="drawer-content scrollable-content">
+        <!-- Parameters list -->
+        <div class="control-group">
+          <div class="control-label-row">
+            <span class="control-label" data-i18n="threshold">Threshold (dB)</span>
+            <span class="control-value-badge" id="threshold-val">-24 dB</span>
+          </div>
+          <input type="range" id="param-threshold" class="styled-slider" min="-100" max="0" step="1" value="-24">
+        </div>
+
+        <div class="control-group">
+          <div class="control-label-row">
+            <span class="control-label" data-i18n="ratio">Ratio</span>
+            <span class="control-value-badge" id="ratio-val">12.0:1</span>
+          </div>
+          <input type="range" id="param-ratio" class="styled-slider" min="1" max="20" step="0.5" value="12">
+        </div>
+
+        <div class="control-group">
+          <div class="control-label-row">
+            <span class="control-label" data-i18n="attack">Attack Time (s)</span>
+            <span class="control-value-badge" id="attack-val">3 ms</span>
+          </div>
+          <input type="range" id="param-attack" class="styled-slider" min="0.001" max="0.1" step="0.001" value="0.003">
+        </div>
+
+        <div class="control-group">
+          <div class="control-label-row">
+            <span class="control-label" data-i18n="release">Release Time (s)</span>
+            <span class="control-value-badge" id="release-val">250 ms</span>
+          </div>
+          <input type="range" id="param-release" class="styled-slider" min="0.01" max="1.0" step="0.01" value="0.25">
+        </div>
+
+        <div class="control-group">
+          <div class="control-label-row">
+            <span class="control-label" data-i18n="knee">Knee (dB)</span>
+            <span class="control-value-badge" id="knee-val">30 dB</span>
+          </div>
+          <input type="range" id="param-knee" class="styled-slider" min="0" max="40" step="1" value="30">
+        </div>
+
+        <div class="control-group">
+          <div class="control-label-row">
+            <span class="control-label" data-i18n="makeupGain">Makeup Gain (dB)</span>
+            <span class="control-value-badge" id="makeup-gain-val">0 dB</span>
+          </div>
+          <input type="range" id="param-makeup-gain" class="styled-slider" min="0" max="20" step="1" value="0">
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Bar (Language Switcher, Reset Button) -->
+    <footer class="bottom-bar">
+      <div class="bottom-left">
+        <select id="lang-select" class="styled-select" title="Change Language">
+          <option value="en">English</option>
+          <option value="zh_TW">繁體中文</option>
+          <option value="ja">日本語</option>
+        </select>
+      </div>
+      <div class="bottom-center">
+        <!-- Reserved for future indicators -->
+      </div>
+      <div class="bottom-right">
+        <button id="reset-btn" class="reset-btn" data-i18n="resetBtn">Reset</button>
+      </div>
+    </footer>
+  </div>
+
+  <script src="popup.js" type="module"></script>
+</body>
+</html>

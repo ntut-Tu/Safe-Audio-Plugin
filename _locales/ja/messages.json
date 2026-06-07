@@ -1,0 +1,8 @@
+{
+  "extensionName": {
+    "message": "SafeAudio - 音量保護リミッター"
+  },
+  "extensionDescription": {
+    "message": "突然の大音量（ジャンプスケア、爆音配信など）から耳を保護するため、タブの音声を圧縮して制限します。"
+  }
+}

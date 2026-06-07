@@ -1,0 +1,8 @@
+{
+  "extensionName": {
+    "message": "SafeAudio - Volume Spike Protection"
+  },
+  "extensionDescription": {
+    "message": "Protects your hearing by compressing and limiting sudden audio spikes (jump scares, loud volume spikes) on any tab."
+  }
+}
