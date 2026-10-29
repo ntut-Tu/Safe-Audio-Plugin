@@ -1,6 +1,6 @@
 {
   "name": "chrome_sound_plugin",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "SafeAudio - Sound Limiter Chrome Extension",
   "main": "background.js",
   "type": "module",
